@@ -2,27 +2,47 @@
   (:gen-class)
   (:require [clojure.java.io :as io]))
 
-(defn configDir
-  "Get the path to a configuration directory"
-  [& args]
-  (clojure.string/join "/" (reduce conj [(System/getenv "HOME") ".board"] args)))
+(def ^{:private true} config-dir
+  (clojure.string/join "/" [(System/getenv "HOME") ".board"]))
 
-(defn readConfig
-  "Read configuration from a given directory"
+;; Return a single hashmap defined in a file.
+(defn- read-config
+  [file-name]
+  {:pre  [(.exists (io/file file-name))]
+   :post [(map? %)]}
+  (-> file-name (slurp) (read-string) (eval)))
+
+;; Return a list of filenames
+;; Currently unused, but maybe useful in the future because it was
+;; before I rewrote the whole thing.
+(defn- files-in-dir
   [directory]
-  ;; Do something here
-  )
+  {:pre  [(.isDirectory (io/file directory))]
+   :post [(vector? %)]}
+  (vec (for [d (.listFiles (io/file directory))]
+         (.getCanonicalPath d))))
 
-(defn generateConfig
+(defn config-path
+  "Get the path to a config file. Optional argument is a submodule for
+  configuration (e.g. \"github\")"
+  [submodule]
+  (clojure.string/join "/" [config-dir (str submodule ".clj")]))
+
+(defn initialize-config
   "Generate a configuration skeleton"
   [directory]
-  (.mkdir (io/file directory)))
+  (let [dir-f (io/file directory)]
+    (if-not (.exists dir-f) (.mkdir dir-f))))
 
-(defn configure
+;; FIXME: Needs test.
+(defn save-config
+  "Write configuration file to a directory"
+  [config submodule]
+  (spit (config-path submodule) (str config)))
+
+(defn load-config
   "Create/update configuration from config dir"
-  [& [directory]]
-  (def dir (configDir directory))
-  (if  (.isDirectory (io/file dir))
-    (readConfig dir)
-    (generateConfig dir)))
-
+  [submodule]
+  (let [config-file (config-path submodule)]
+    (if-not (.exists (io/file config-file)) (initialize-config config-file))
+    (read-config config-file)))
